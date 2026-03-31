@@ -7,8 +7,8 @@ export const PICKUP_POINTS_QUERY = `
   ) {
     session(id: $sessionId) {
       pickupPoint {
-        pickupPoints {
-          points(first: $first, page: $page, filters: $filters) {
+        pickupPoints(filters: $filters) {
+          points(first: $first, page: $page) {
             paginatorInfo {
               currentPage
               hasMorePages
@@ -29,17 +29,32 @@ export const PICKUP_POINTS_QUERY = `
                 latitude
                 longitude
               }
-              openingHours {
-                day
-                start {
-                  hour
-                  minute
-                }
-                end {
-                  hour
-                  minute
-                }
-              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const PICKUP_POINT_DETAILS_QUERY = `
+  query PickupPointDetails(
+    $sessionId: ID!
+    $id: ID!
+  ) {
+    session(id: $sessionId) {
+      pickupPoint {
+        pickupPoint(id: $id) {
+          id
+          openingHours {
+            day
+            start {
+              hour
+              minute
+            }
+            end {
+              hour
+              minute
             }
           }
         }

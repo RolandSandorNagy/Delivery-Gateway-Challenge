@@ -3,12 +3,14 @@ import type { PickupPoint } from "./model";
 type PickupPointInfoPanelProps = {
   activePickupPoint: PickupPoint | null;
   selectedPickupPointId: string | null;
+  isOpeningHoursLoading: boolean;
   onSelectPickupPoint: (pickupPointId: string) => void;
 };
 
 export const PickupPointInfoPanel = ({
   activePickupPoint,
   selectedPickupPointId,
+  isOpeningHoursLoading,
   onSelectPickupPoint,
 }: PickupPointInfoPanelProps) => {
   if (!activePickupPoint) {
@@ -35,7 +37,8 @@ export const PickupPointInfoPanel = ({
         <strong>Type:</strong> {activePickupPoint.type}
       </p>
       <p>
-        <strong>Opening hours:</strong> {activePickupPoint.openingHours || "N/A"}
+        <strong>Opening hours:</strong>{" "}
+        {isOpeningHoursLoading ? "Loading..." : activePickupPoint.openingHours || "N/A"}
       </p>
       <p>
         <strong>ID:</strong> {activePickupPoint.id}
@@ -50,4 +53,3 @@ export const PickupPointInfoPanel = ({
     </section>
   );
 };
-

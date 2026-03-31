@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GraphQlHttpError, GraphQlResponseError } from "../../lib/graphql-client";
 import type { PickupPoint, PickupPointViewport } from "./model";
-import { fetchPickupPoints } from "./pickup-points.api";
+import { fetchPickupPointsPage } from "./pickup-points.api";
 
 type PickupPointsStatus = "loading" | "success" | "error";
 
@@ -9,11 +9,19 @@ type PickupPointsState = {
   status: PickupPointsStatus;
   pickupPoints: PickupPoint[];
   errorMessage: string | null;
+  totalInViewport: number | null;
+  isBackgroundLoading: boolean;
 };
 
 export type UsePickupPointsResult = PickupPointsState & {
   reload: () => void;
 };
+
+const FETCH_DEBOUNCE_MS = 300;
+const FIRST_PAGE_SIZE = 200;
+const BACKGROUND_PAGE_SIZE = 200;
+const MAX_PICKUP_POINTS = 2000;
+const MAX_BACKGROUND_PAGES = 8;
 
 const mapErrorMessage = (error: unknown): string => {
   if (error instanceof GraphQlHttpError) {
@@ -34,7 +42,25 @@ const mapErrorMessage = (error: unknown): string => {
 
 const isAbortError = (error: unknown): boolean => error instanceof DOMException && error.name === "AbortError";
 
-const FETCH_DEBOUNCE_MS = 300;
+const mergeUniqueById = (base: PickupPoint[], incoming: PickupPoint[]): PickupPoint[] => {
+  const byId = new Map<string, PickupPoint>();
+  for (const item of base) {
+    byId.set(item.id, item);
+  }
+  for (const item of incoming) {
+    byId.set(item.id, item);
+  }
+  return Array.from(byId.values());
+};
+
+const viewportCacheKey = (viewport: PickupPointViewport): string =>
+  [
+    viewport.zoom,
+    viewport.bounds.north.toFixed(2),
+    viewport.bounds.south.toFixed(2),
+    viewport.bounds.east.toFixed(2),
+    viewport.bounds.west.toFixed(2),
+  ].join("|");
 
 export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickupPointsResult => {
   const [reloadCounter, setReloadCounter] = useState(0);
@@ -42,14 +68,34 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
     status: "loading",
     pickupPoints: [],
     errorMessage: null,
+    totalInViewport: null,
+    isBackgroundLoading: false,
   });
 
+  const cacheRef = useRef<Map<string, PickupPoint[]>>(new Map());
+  const key = useMemo(() => (viewport ? viewportCacheKey(viewport) : null), [viewport]);
+
   const reload = useCallback(() => {
+    if (key) {
+      cacheRef.current.delete(key);
+    }
     setReloadCounter((current) => current + 1);
-  }, []);
+  }, [key]);
 
   useEffect(() => {
-    if (!viewport) {
+    if (!viewport || !key) {
+      return;
+    }
+
+    const cached = cacheRef.current.get(key);
+    if (cached) {
+      setState({
+        status: "success",
+        pickupPoints: cached,
+        errorMessage: null,
+        totalInViewport: cached.length,
+        isBackgroundLoading: false,
+      });
       return;
     }
 
@@ -59,15 +105,67 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
         ...current,
         status: "loading",
         errorMessage: null,
+        isBackgroundLoading: false,
       }));
 
-      fetchPickupPoints({ viewport, signal: controller.signal })
-        .then((pickupPoints) => {
+      fetchPickupPointsPage({
+        viewport,
+        page: 1,
+        first: FIRST_PAGE_SIZE,
+        signal: controller.signal,
+      })
+        .then(async (firstPage) => {
+          let aggregated = firstPage.pickupPoints;
+          const initialSlice = aggregated.slice(0, MAX_PICKUP_POINTS);
+          cacheRef.current.set(key, initialSlice);
+
           setState({
             status: "success",
-            pickupPoints,
+            pickupPoints: initialSlice,
             errorMessage: null,
+            totalInViewport: firstPage.total,
+            isBackgroundLoading: firstPage.hasMorePages && initialSlice.length < MAX_PICKUP_POINTS,
           });
+
+          let page = 2;
+          let hasMorePages = firstPage.hasMorePages;
+          let loadedBackgroundPages = 0;
+
+          while (
+            hasMorePages &&
+            aggregated.length < MAX_PICKUP_POINTS &&
+            loadedBackgroundPages < MAX_BACKGROUND_PAGES
+          ) {
+            const nextPage = await fetchPickupPointsPage({
+              viewport,
+              page,
+              first: BACKGROUND_PAGE_SIZE,
+              signal: controller.signal,
+            });
+
+            aggregated = mergeUniqueById(aggregated, nextPage.pickupPoints);
+            const nextSlice = aggregated.slice(0, MAX_PICKUP_POINTS);
+            cacheRef.current.set(key, nextSlice);
+
+            setState((current) => ({
+              ...current,
+              pickupPoints: nextSlice,
+              totalInViewport: nextPage.total,
+              isBackgroundLoading:
+                nextPage.hasMorePages &&
+                nextSlice.length < MAX_PICKUP_POINTS &&
+                loadedBackgroundPages + 1 < MAX_BACKGROUND_PAGES,
+            }));
+
+            hasMorePages = nextPage.hasMorePages;
+            page += 1;
+            loadedBackgroundPages += 1;
+          }
+
+          setState((current) => ({
+            ...current,
+            isBackgroundLoading: false,
+          }));
         })
         .catch((error: unknown) => {
           if (isAbortError(error)) {
@@ -78,6 +176,8 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
             status: "error",
             pickupPoints: current.pickupPoints,
             errorMessage: mapErrorMessage(error),
+            totalInViewport: current.totalInViewport,
+            isBackgroundLoading: false,
           }));
         });
     }, FETCH_DEBOUNCE_MS);
@@ -86,10 +186,11 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
       window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [reloadCounter, viewport]);
+  }, [reloadCounter, viewport, key]);
 
   return {
     ...state,
     reload,
   };
 };
+

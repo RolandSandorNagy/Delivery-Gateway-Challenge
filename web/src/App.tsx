@@ -3,15 +3,21 @@ import { geocodeLocation } from "./features/location/geocoding.api";
 import { PickupPointInfoPanel } from "./features/pickup-points/pickup-point-info-panel";
 import { PickupPointsMap } from "./features/pickup-points/pickup-points-map";
 import type { PickupPointViewport } from "./features/pickup-points/model";
+import { fetchPickupPointOpeningHours } from "./features/pickup-points/pickup-points.api";
 import { usePickupPoints } from "./features/pickup-points/use-pickup-points";
 
 type SearchStatus = "idle" | "loading" | "success" | "error";
 
 function App() {
   const [mapViewport, setMapViewport] = useState<PickupPointViewport | null>(null);
-  const { status, pickupPoints, errorMessage, reload } = usePickupPoints(mapViewport);
+  const { status, pickupPoints, errorMessage, reload, totalInViewport, isBackgroundLoading } =
+    usePickupPoints(mapViewport);
   const [activePickupPointId, setActivePickupPointId] = useState<string | null>(null);
   const [selectedPickupPointId, setSelectedPickupPointId] = useState<string | null>(null);
+  const [openingHoursByPickupPointId, setOpeningHoursByPickupPointId] = useState<Record<string, string | null>>({});
+  const [openingHoursLoadingByPickupPointId, setOpeningHoursLoadingByPickupPointId] = useState<
+    Record<string, boolean>
+  >({});
   const [searchQuery, setSearchQuery] = useState("");
   const [searchStatus, setSearchStatus] = useState<SearchStatus>("idle");
   const [searchErrorMessage, setSearchErrorMessage] = useState<string | null>(null);
@@ -76,9 +82,33 @@ function App() {
   };
 
   const activePickupPoint =
-    activePickupPointId === null ? null : pickupPointById.get(activePickupPointId) ?? null;
+    activePickupPointId === null
+      ? null
+      : (() => {
+          const point = pickupPointById.get(activePickupPointId) ?? null;
+          if (!point) {
+            return null;
+          }
+
+          const overriddenOpeningHours = openingHoursByPickupPointId[point.id];
+          return overriddenOpeningHours === undefined
+            ? point
+            : { ...point, openingHours: overriddenOpeningHours };
+        })();
   const selectedPickupPoint =
-    selectedPickupPointId === null ? null : pickupPointById.get(selectedPickupPointId) ?? null;
+    selectedPickupPointId === null
+      ? null
+      : (() => {
+          const point = pickupPointById.get(selectedPickupPointId) ?? null;
+          if (!point) {
+            return null;
+          }
+
+          const overriddenOpeningHours = openingHoursByPickupPointId[point.id];
+          return overriddenOpeningHours === undefined
+            ? point
+            : { ...point, openingHours: overriddenOpeningHours };
+        })();
 
   useEffect(() => {
     if (activePickupPointId && !pickupPointById.has(activePickupPointId)) {
@@ -89,6 +119,44 @@ function App() {
       setSelectedPickupPointId(null);
     }
   }, [activePickupPointId, pickupPointById, selectedPickupPointId]);
+
+  useEffect(() => {
+    if (!activePickupPoint || activePickupPoint.openingHours !== null) {
+      return;
+    }
+
+    if (openingHoursByPickupPointId[activePickupPoint.id] !== undefined) {
+      return;
+    }
+
+    const controller = new AbortController();
+    setOpeningHoursLoadingByPickupPointId((current) => ({
+      ...current,
+      [activePickupPoint.id]: true,
+    }));
+    fetchPickupPointOpeningHours(activePickupPoint.id, controller.signal)
+      .then((openingHours) => {
+        setOpeningHoursByPickupPointId((current) => ({
+          ...current,
+          [activePickupPoint.id]: openingHours,
+        }));
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+      })
+      .finally(() => {
+        setOpeningHoursLoadingByPickupPointId((current) => ({
+          ...current,
+          [activePickupPoint.id]: false,
+        }));
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [activePickupPoint, openingHoursByPickupPointId]);
 
   return (
     <main className="app-shell">
@@ -131,8 +199,10 @@ function App() {
         {status === "success" ? (
           <>
             <p>Loaded pickup points: {pickupPoints.length}</p>
+            <p>Total in viewport (API): {totalInViewport ?? "-"}</p>
             <p>Focused pickup point ID: {activePickupPointId ?? "-"}</p>
             <p>Selected pickup point ID: {selectedPickupPointId ?? "-"}</p>
+            {isBackgroundLoading ? <p>Loading more points in background...</p> : null}
             {selectedPickupPoint ? (
               <p>
                 Selected pickup point: {selectedPickupPoint.name} ({selectedPickupPoint.address || "N/A"})
@@ -150,11 +220,13 @@ function App() {
         selectedPickupPointId={selectedPickupPointId}
         onOpenPickupPoint={setActivePickupPointId}
         onViewportChange={setMapViewport}
+        isLoadingData={status === "loading" || isBackgroundLoading}
         focusLocation={focusLocation}
       />
       <PickupPointInfoPanel
         activePickupPoint={activePickupPoint}
         selectedPickupPointId={selectedPickupPointId}
+        isOpeningHoursLoading={activePickupPoint ? openingHoursLoadingByPickupPointId[activePickupPoint.id] === true : false}
         onSelectPickupPoint={setSelectedPickupPointId}
       />
     </main>

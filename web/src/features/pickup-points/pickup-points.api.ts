@@ -1,7 +1,34 @@
 import { appEnv } from "../../config/env";
 import { requestGraphQl } from "../../lib/graphql-client";
 import type { PickupPoint, PickupPointViewport } from "./model";
-import { PICKUP_POINTS_QUERY } from "./pickup-points.query";
+import { PICKUP_POINT_DETAILS_QUERY, PICKUP_POINTS_QUERY } from "./pickup-points.query";
+
+type PickupPointRow = {
+  id: string;
+  name: string;
+  type: string;
+  address?: {
+    city?: string | null;
+    postalCode?: string | null;
+    addressLine1?: string | null;
+    addressLine2?: string | null;
+  } | null;
+  location?: {
+    latitude?: number | null;
+    longitude?: number | null;
+  } | null;
+  openingHours?: Array<{
+    day: string;
+    start: {
+      hour: number;
+      minute: number;
+    };
+    end: {
+      hour: number;
+      minute: number;
+    };
+  }> | null;
+};
 
 type PickupPointsQueryData = {
   session?: {
@@ -14,42 +41,37 @@ type PickupPointsQueryData = {
             total: number;
             lastPage: number;
           } | null;
-          data?: Array<{
-            id: string;
-            name: string;
-            type: string;
-            openingHours?: Array<{
-              day: string;
-              start: {
-                hour: number;
-                minute: number;
-              };
-              end: {
-                hour: number;
-                minute: number;
-              };
-            }> | null;
-            address?: {
-              city?: string | null;
-              postalCode?: string | null;
-              addressLine1?: string | null;
-              addressLine2?: string | null;
-            } | null;
-            location?: {
-              latitude?: number | null;
-              longitude?: number | null;
-            } | null;
-          }> | null;
+          data?: PickupPointRow[] | null;
         } | null;
       } | null;
     } | null;
   } | null;
 };
 
-const PAGE_SIZE = 500;
-// Keep initial load responsive. Map clustering handles large rendered sets,
-// while backend pagination can be extended later for infinite/viewport loading.
-const MAX_PICKUP_POINTS = 500;
+type PickupPointDetailsQueryData = {
+  session?: {
+    pickupPoint?: {
+      pickupPoint?: {
+        id: string;
+        openingHours?: PickupPointRow["openingHours"];
+      } | null;
+    } | null;
+  } | null;
+};
+
+export type FetchPickupPointsPageOptions = {
+  viewport: PickupPointViewport;
+  page: number;
+  first: number;
+  signal?: AbortSignal;
+};
+
+export type FetchPickupPointsPageResult = {
+  pickupPoints: PickupPoint[];
+  page: number;
+  hasMorePages: boolean;
+  total: number;
+};
 
 const pad2 = (value: number): string => value.toString().padStart(2, "0");
 
@@ -66,15 +88,7 @@ const dayShortLabel = (day: string): string => {
   return labels[day] ?? day;
 };
 
-const formatOpeningHours = (
-  openingHours: NonNullable<
-    NonNullable<
-      NonNullable<
-        NonNullable<NonNullable<PickupPointsQueryData["session"]>["pickupPoint"]>["pickupPoints"]
-      >["points"]
-    >["data"]
-  >[number]["openingHours"],
-): string | null => {
+const formatOpeningHours = (openingHours: PickupPointRow["openingHours"]): string | null => {
   if (!openingHours || openingHours.length === 0) {
     return null;
   }
@@ -88,15 +102,7 @@ const formatOpeningHours = (
   return formatted.join(", ");
 };
 
-const formatAddress = (
-  address: NonNullable<
-    NonNullable<
-      NonNullable<
-        NonNullable<NonNullable<PickupPointsQueryData["session"]>["pickupPoint"]>["pickupPoints"]
-      >["points"]
-    >["data"]
-  >[number]["address"],
-): string => {
+const formatAddress = (address: PickupPointRow["address"]): string => {
   if (!address) {
     return "";
   }
@@ -108,15 +114,7 @@ const formatAddress = (
   return parts.join(", ");
 };
 
-const toDomainPickupPoint = (
-  item: NonNullable<
-    NonNullable<
-      NonNullable<
-        NonNullable<NonNullable<PickupPointsQueryData["session"]>["pickupPoint"]>["pickupPoints"]
-      >["points"]
-    >["data"]
-  >[number],
-): PickupPoint | null => {
+const toDomainPickupPoint = (item: PickupPointRow): PickupPoint | null => {
   if (item.location?.latitude == null || item.location?.longitude == null) {
     return null;
   }
@@ -132,51 +130,73 @@ const toDomainPickupPoint = (
   };
 };
 
-type FetchPickupPointsOptions = {
-  viewport: PickupPointViewport;
-  signal?: AbortSignal;
+const createFiltersFromViewport = (viewport: PickupPointViewport): Record<string, unknown> | undefined => {
+  const hasAntimeridianCrossing = viewport.bounds.west > viewport.bounds.east;
+  if (hasAntimeridianCrossing) {
+    return undefined;
+  }
+
+  return {
+    boundingBox: {
+      southWest: {
+        latitude: viewport.bounds.south,
+        longitude: viewport.bounds.west,
+      },
+      northEast: {
+        latitude: viewport.bounds.north,
+        longitude: viewport.bounds.east,
+      },
+    },
+  };
 };
 
-export const fetchPickupPoints = async ({
+export const fetchPickupPointsPage = async ({
   viewport,
+  page,
+  first,
   signal,
-}: FetchPickupPointsOptions): Promise<PickupPoint[]> => {
-  const hasAntimeridianCrossing = viewport.bounds.west > viewport.bounds.east;
-  const filters = hasAntimeridianCrossing
-    ? undefined
-    : {
-        boundingBox: {
-          southWest: {
-            latitude: viewport.bounds.south,
-            longitude: viewport.bounds.west,
-          },
-          northEast: {
-            latitude: viewport.bounds.north,
-            longitude: viewport.bounds.east,
-          },
-        },
-      };
-
+}: FetchPickupPointsPageOptions): Promise<FetchPickupPointsPageResult> => {
   const data = await requestGraphQl<PickupPointsQueryData>({
     endpoint: appEnv.graphqlEndpoint,
     query: PICKUP_POINTS_QUERY,
     variables: {
       sessionId: appEnv.sessionId,
-      first: PAGE_SIZE,
-      page: 1,
-      filters,
+      first,
+      page,
+      filters: createFiltersFromViewport(viewport),
     },
     timeoutMs: appEnv.requestTimeoutMs,
     signal,
   });
 
   const pointsPayload = data.session?.pickupPoint?.pickupPoints?.points;
-  if (!pointsPayload?.data) {
-    return [];
-  }
+  const rows = pointsPayload?.data ?? [];
+  const mapped = rows.map(toDomainPickupPoint).filter((item): item is PickupPoint => item !== null);
 
-  return pointsPayload.data
-    .map(toDomainPickupPoint)
-    .filter((item): item is PickupPoint => item !== null)
-    .slice(0, MAX_PICKUP_POINTS);
+  return {
+    pickupPoints: mapped,
+    page,
+    hasMorePages: pointsPayload?.paginatorInfo?.hasMorePages ?? false,
+    total: pointsPayload?.paginatorInfo?.total ?? mapped.length,
+  };
 };
+
+export const fetchPickupPointOpeningHours = async (
+  pickupPointId: string,
+  signal?: AbortSignal,
+): Promise<string | null> => {
+  const data = await requestGraphQl<PickupPointDetailsQueryData>({
+    endpoint: appEnv.graphqlEndpoint,
+    query: PICKUP_POINT_DETAILS_QUERY,
+    variables: {
+      sessionId: appEnv.sessionId,
+      id: pickupPointId,
+    },
+    timeoutMs: appEnv.requestTimeoutMs,
+    signal,
+  });
+
+  const openingHours = data.session?.pickupPoint?.pickupPoint?.openingHours ?? null;
+  return formatOpeningHours(openingHours);
+};
+

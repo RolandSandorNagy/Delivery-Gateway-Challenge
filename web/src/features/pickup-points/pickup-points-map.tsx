@@ -1,23 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import * as L from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
-import iconRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
-import iconUrl from "leaflet/dist/images/marker-icon.png";
-import shadowUrl from "leaflet/dist/images/marker-shadow.png";
 import type { PickupPoint, PickupPointViewport } from "./model";
 import { clusterPickupPoints } from "./pickup-points-clustering";
-
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl,
-  iconUrl,
-  shadowUrl,
-});
 
 type PickupPointsMapProps = {
   pickupPoints: PickupPoint[];
   selectedPickupPointId: string | null;
   onOpenPickupPoint: (pickupPointId: string) => void;
   onViewportChange: (viewport: PickupPointViewport) => void;
+  isLoadingData: boolean;
   focusLocation: {
     requestId: number;
     latitude: number;
@@ -57,6 +49,14 @@ const createClusterIcon = (count: number): L.DivIcon => {
     iconSize: [40, 40],
   });
 };
+
+const createPickupPointIcon = (isSelected: boolean): L.DivIcon =>
+  L.divIcon({
+    html: "",
+    className: `pickup-point-marker${isSelected ? " pickup-point-marker-selected" : ""}`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+  });
 
 const FocusMapToLocation = ({
   focusLocation,
@@ -129,9 +129,11 @@ const ClusteredMarkersLayer = ({
         }
 
         const point = item.point;
+        const isSelected = selectedPickupPointId === point.id;
         return (
           <Marker
             key={point.id}
+            icon={createPickupPointIcon(isSelected)}
             position={[point.latitude, point.longitude]}
             eventHandlers={{
               click: () => onOpenPickupPoint(point.id),
@@ -143,8 +145,6 @@ const ClusteredMarkersLayer = ({
               {point.address}
               <br />
               Type: {point.type}
-              <br />
-              {selectedPickupPointId === point.id ? "Selected" : "Not selected"}
             </Popup>
           </Marker>
         );
@@ -158,6 +158,7 @@ export const PickupPointsMap = ({
   selectedPickupPointId,
   onOpenPickupPoint,
   onViewportChange,
+  isLoadingData,
   focusLocation,
 }: PickupPointsMapProps) => {
   const [mapLoadError, setMapLoadError] = useState<string | null>(null);
@@ -186,8 +187,8 @@ export const PickupPointsMap = ({
         />
       </MapContainer>
       <p className="map-note">Viewport-based fetch + clustering is active.</p>
+      {isLoadingData ? <p className="map-loading-note">Loading points for current viewport...</p> : null}
       {mapLoadError ? <p className="error-text">{mapLoadError}</p> : null}
     </section>
   );
 };
-

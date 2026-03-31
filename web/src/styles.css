@@ -125,6 +125,24 @@ button:hover {
   font-size: 0.9rem;
 }
 
+.map-loading-note {
+  color: #1d4ed8;
+  font-size: 0.9rem;
+}
+
+.pickup-point-marker {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #111827;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.25);
+}
+
+.pickup-point-marker-selected {
+  background: #16a34a;
+}
+
 .cluster-marker {
   background: #111827;
   color: #ffffff;
