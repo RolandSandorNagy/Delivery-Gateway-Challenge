@@ -73,6 +73,10 @@ body {
   gap: 0.5rem;
 }
 
+.map-frame {
+  position: relative;
+}
+
 .info-card {
   border: 1px solid #d1d5db;
   background: #ffffff;
@@ -130,6 +134,44 @@ button:hover {
   font-size: 0.9rem;
 }
 
+.map-loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.82);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.6rem;
+  border-radius: 0.5rem;
+  z-index: 550;
+}
+
+.map-loading-overlay p {
+  font-weight: 600;
+}
+
+.loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #d1d5db;
+  border-top-color: #111827;
+  border-radius: 999px;
+  animation: spin 0.9s linear infinite;
+}
+
+.map-background-badge {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: rgba(17, 24, 39, 0.92);
+  color: #ffffff;
+  padding: 0.35rem 0.55rem;
+  border-radius: 0.45rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  z-index: 540;
+}
+
 .pickup-point-marker {
   width: 16px;
   height: 16px;
@@ -176,4 +218,10 @@ button:hover {
   margin-left: -24px;
   margin-top: -24px;
   font-size: 0.9rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

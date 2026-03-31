@@ -9,7 +9,10 @@ type PickupPointsMapProps = {
   selectedPickupPointId: string | null;
   onOpenPickupPoint: (pickupPointId: string) => void;
   onViewportChange: (viewport: PickupPointViewport) => void;
-  isLoadingData: boolean;
+  isInitialLoading: boolean;
+  isBackgroundLoading: boolean;
+  loadedCount: number;
+  totalInViewport: number | null;
   focusLocation: {
     requestId: number;
     latitude: number;
@@ -158,36 +161,52 @@ export const PickupPointsMap = ({
   selectedPickupPointId,
   onOpenPickupPoint,
   onViewportChange,
-  isLoadingData,
+  isInitialLoading,
+  isBackgroundLoading,
+  loadedCount,
+  totalInViewport,
   focusLocation,
 }: PickupPointsMapProps) => {
   const [mapLoadError, setMapLoadError] = useState<string | null>(null);
 
   return (
     <section className="map-card">
-      <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="pickup-points-map">
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          eventHandlers={{
-            tileerror: () => {
-              setMapLoadError("Map tiles could not be loaded. Please check your connection and try again.");
-            },
-            load: () => {
-              setMapLoadError(null);
-            },
-          }}
-        />
-        <FocusMapToLocation focusLocation={focusLocation} />
-        <ClusteredMarkersLayer
-          pickupPoints={pickupPoints}
-          selectedPickupPointId={selectedPickupPointId}
-          onOpenPickupPoint={onOpenPickupPoint}
-          onViewportChange={onViewportChange}
-        />
-      </MapContainer>
+      <div className="map-frame">
+        <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="pickup-points-map">
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            eventHandlers={{
+              tileerror: () => {
+                setMapLoadError("Map tiles could not be loaded. Please check your connection and try again.");
+              },
+              load: () => {
+                setMapLoadError(null);
+              },
+            }}
+          />
+          <FocusMapToLocation focusLocation={focusLocation} />
+          <ClusteredMarkersLayer
+            pickupPoints={pickupPoints}
+            selectedPickupPointId={selectedPickupPointId}
+            onOpenPickupPoint={onOpenPickupPoint}
+            onViewportChange={onViewportChange}
+          />
+        </MapContainer>
+        {isInitialLoading ? (
+          <div className="map-loading-overlay" role="status" aria-live="polite">
+            <div className="loading-spinner" />
+            <p>Loading pickup points for this map area...</p>
+          </div>
+        ) : null}
+        {isBackgroundLoading ? (
+          <div className="map-background-badge" role="status" aria-live="polite">
+            Updating results: {loadedCount}
+            {totalInViewport ? ` / ${totalInViewport}` : ""}
+          </div>
+        ) : null}
+      </div>
       <p className="map-note">Viewport-based fetch + clustering is active.</p>
-      {isLoadingData ? <p className="map-loading-note">Loading points for current viewport...</p> : null}
       {mapLoadError ? <p className="error-text">{mapLoadError}</p> : null}
     </section>
   );

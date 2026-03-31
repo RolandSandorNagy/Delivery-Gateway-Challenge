@@ -109,6 +109,8 @@ function App() {
             ? point
             : { ...point, openingHours: overriddenOpeningHours };
         })();
+  const isInitialMapLoading = status === "loading" && pickupPoints.length === 0;
+  const isViewportRefreshing = status === "loading" && pickupPoints.length > 0;
 
   useEffect(() => {
     if (activePickupPointId && !pickupPointById.has(activePickupPointId)) {
@@ -202,6 +204,7 @@ function App() {
             <p>Total in viewport (API): {totalInViewport ?? "-"}</p>
             <p>Focused pickup point ID: {activePickupPointId ?? "-"}</p>
             <p>Selected pickup point ID: {selectedPickupPointId ?? "-"}</p>
+            {isViewportRefreshing ? <p>Refreshing viewport results...</p> : null}
             {isBackgroundLoading ? <p>Loading more points in background...</p> : null}
             {selectedPickupPoint ? (
               <p>
@@ -220,7 +223,10 @@ function App() {
         selectedPickupPointId={selectedPickupPointId}
         onOpenPickupPoint={setActivePickupPointId}
         onViewportChange={setMapViewport}
-        isLoadingData={status === "loading" || isBackgroundLoading}
+        isInitialLoading={isInitialMapLoading}
+        isBackgroundLoading={isBackgroundLoading || isViewportRefreshing}
+        loadedCount={pickupPoints.length}
+        totalInViewport={totalInViewport}
         focusLocation={focusLocation}
       />
       <PickupPointInfoPanel
