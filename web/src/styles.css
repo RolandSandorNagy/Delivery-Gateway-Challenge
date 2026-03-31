@@ -73,6 +73,15 @@ body {
   gap: 0.5rem;
 }
 
+.info-card {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
 .pickup-points-map {
   height: 28rem;
   width: 100%;
@@ -80,8 +89,13 @@ body {
 }
 
 h1,
+h2,
 p {
   margin: 0;
+}
+
+h2 {
+  font-size: 1rem;
 }
 
 button {

@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { geocodeLocation } from "./features/location/geocoding.api";
+import { PickupPointInfoPanel } from "./features/pickup-points/pickup-point-info-panel";
 import { PickupPointsMap } from "./features/pickup-points/pickup-points-map";
 import { usePickupPoints } from "./features/pickup-points/use-pickup-points";
 
@@ -7,6 +8,7 @@ type SearchStatus = "idle" | "loading" | "success" | "error";
 
 function App() {
   const { status, pickupPoints, errorMessage, reload } = usePickupPoints();
+  const [activePickupPointId, setActivePickupPointId] = useState<string | null>(null);
   const [selectedPickupPointId, setSelectedPickupPointId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchStatus, setSearchStatus] = useState<SearchStatus>("idle");
@@ -67,6 +69,11 @@ function App() {
     }
   };
 
+  const activePickupPoint =
+    activePickupPointId === null
+      ? null
+      : pickupPoints.find((pickupPoint) => pickupPoint.id === activePickupPointId) ?? null;
+
   return (
     <main className="app-shell">
       <h1>Delivery Gateway Challenge</h1>
@@ -107,6 +114,7 @@ function App() {
         {status === "success" ? (
           <>
             <p>Loaded pickup points: {pickupPoints.length}</p>
+            <p>Focused pickup point ID: {activePickupPointId ?? "-"}</p>
             <p>Selected pickup point ID: {selectedPickupPointId ?? "-"}</p>
             <button type="button" onClick={reload}>
               Refresh
@@ -118,8 +126,13 @@ function App() {
       <PickupPointsMap
         pickupPoints={pickupPoints}
         selectedPickupPointId={selectedPickupPointId}
-        onSelectPickupPoint={setSelectedPickupPointId}
+        onOpenPickupPoint={setActivePickupPointId}
         focusLocation={focusLocation}
+      />
+      <PickupPointInfoPanel
+        activePickupPoint={activePickupPoint}
+        selectedPickupPointId={selectedPickupPointId}
+        onSelectPickupPoint={setSelectedPickupPointId}
       />
     </main>
   );

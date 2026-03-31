@@ -16,7 +16,7 @@ L.Icon.Default.mergeOptions({
 type PickupPointsMapProps = {
   pickupPoints: PickupPoint[];
   selectedPickupPointId: string | null;
-  onSelectPickupPoint: (pickupPointId: string) => void;
+  onOpenPickupPoint: (pickupPointId: string) => void;
   focusLocation: {
     requestId: number;
     latitude: number;
@@ -27,7 +27,7 @@ type PickupPointsMapProps = {
 
 type ClusteredMarkersLayerProps = Pick<
   PickupPointsMapProps,
-  "pickupPoints" | "selectedPickupPointId" | "onSelectPickupPoint"
+  "pickupPoints" | "selectedPickupPointId" | "onOpenPickupPoint"
 >;
 
 const DEFAULT_CENTER: [number, number] = [47.4979, 19.0402];
@@ -97,7 +97,7 @@ const FocusMapToLocation = ({
 const ClusteredMarkersLayer = ({
   pickupPoints,
   selectedPickupPointId,
-  onSelectPickupPoint,
+  onOpenPickupPoint,
 }: ClusteredMarkersLayerProps) => {
   const map = useMap();
   const [viewport, setViewport] = useState<MapViewport>(() => readViewport(map));
@@ -149,7 +149,7 @@ const ClusteredMarkersLayer = ({
             key={point.id}
             position={[point.latitude, point.longitude]}
             eventHandlers={{
-              click: () => onSelectPickupPoint(point.id),
+              click: () => onOpenPickupPoint(point.id),
             }}
           >
             <Popup>
@@ -171,7 +171,7 @@ const ClusteredMarkersLayer = ({
 export const PickupPointsMap = ({
   pickupPoints,
   selectedPickupPointId,
-  onSelectPickupPoint,
+  onOpenPickupPoint,
   focusLocation,
 }: PickupPointsMapProps) => {
   return (
@@ -186,7 +186,7 @@ export const PickupPointsMap = ({
         <ClusteredMarkersLayer
           pickupPoints={pickupPoints}
           selectedPickupPointId={selectedPickupPointId}
-          onSelectPickupPoint={onSelectPickupPoint}
+          onOpenPickupPoint={onOpenPickupPoint}
         />
       </MapContainer>
       <p className="map-note">Viewport-based clustering is active for large datasets.</p>
