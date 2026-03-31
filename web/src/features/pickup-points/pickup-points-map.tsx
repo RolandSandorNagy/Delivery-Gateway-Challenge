@@ -17,7 +17,18 @@ type PickupPointsMapProps = {
   pickupPoints: PickupPoint[];
   selectedPickupPointId: string | null;
   onSelectPickupPoint: (pickupPointId: string) => void;
+  focusLocation: {
+    requestId: number;
+    latitude: number;
+    longitude: number;
+    label: string;
+  } | null;
 };
+
+type ClusteredMarkersLayerProps = Pick<
+  PickupPointsMapProps,
+  "pickupPoints" | "selectedPickupPointId" | "onSelectPickupPoint"
+>;
 
 const DEFAULT_CENTER: [number, number] = [47.4979, 19.0402];
 const DEFAULT_ZOOM = 12;
@@ -65,11 +76,29 @@ const FitMapToPoints = ({ pickupPoints }: { pickupPoints: PickupPoint[] }) => {
   return null;
 };
 
+const FocusMapToLocation = ({
+  focusLocation,
+}: {
+  focusLocation: PickupPointsMapProps["focusLocation"];
+}) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!focusLocation) {
+      return;
+    }
+
+    map.flyTo([focusLocation.latitude, focusLocation.longitude], 14, { duration: 0.4 });
+  }, [focusLocation, map]);
+
+  return null;
+};
+
 const ClusteredMarkersLayer = ({
   pickupPoints,
   selectedPickupPointId,
   onSelectPickupPoint,
-}: PickupPointsMapProps) => {
+}: ClusteredMarkersLayerProps) => {
   const map = useMap();
   const [viewport, setViewport] = useState<MapViewport>(() => readViewport(map));
 
@@ -143,6 +172,7 @@ export const PickupPointsMap = ({
   pickupPoints,
   selectedPickupPointId,
   onSelectPickupPoint,
+  focusLocation,
 }: PickupPointsMapProps) => {
   return (
     <section className="map-card">
@@ -152,6 +182,7 @@ export const PickupPointsMap = ({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <FitMapToPoints pickupPoints={pickupPoints} />
+        <FocusMapToLocation focusLocation={focusLocation} />
         <ClusteredMarkersLayer
           pickupPoints={pickupPoints}
           selectedPickupPointId={selectedPickupPointId}

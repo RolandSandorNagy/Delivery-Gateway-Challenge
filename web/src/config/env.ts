@@ -21,5 +21,7 @@ export const appEnv = {
   merchantId: required("VITE_DGW_MERCHANT_ID"),
   sessionId: required("VITE_DGW_SESSION_ID"),
   requestTimeoutMs: numeric("VITE_REQUEST_TIMEOUT_MS", 15_000),
+  geocodingEndpoint:
+    import.meta.env.VITE_GEOCODING_ENDPOINT ?? "https://nominatim.openstreetmap.org/search",
+  geocodingTimeoutMs: numeric("VITE_GEOCODING_TIMEOUT_MS", 10_000),
 };
-
