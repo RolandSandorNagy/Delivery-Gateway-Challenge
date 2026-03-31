@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GraphQlHttpError, GraphQlResponseError } from "../../lib/graphql-client";
-import type { PickupPoint, PickupPointViewport } from "./model";
+import type { PickupPoint, PickupPointMapBounds, PickupPointViewport } from "./model";
 import { fetchPickupPointsPage } from "./pickup-points.api";
 
 type PickupPointsStatus = "loading" | "success" | "error";
@@ -22,6 +22,9 @@ const FIRST_PAGE_SIZE = 200;
 const BACKGROUND_PAGE_SIZE = 200;
 const MAX_PICKUP_POINTS = 2000;
 const MAX_BACKGROUND_PAGES = 8;
+const MAX_CACHE_ENTRIES = 8;
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const PREFETCH_PADDING_FACTOR = 0.35;
 
 const mapErrorMessage = (error: unknown): string => {
   if (error instanceof GraphQlHttpError) {
@@ -53,14 +56,81 @@ const mergeUniqueById = (base: PickupPoint[], incoming: PickupPoint[]): PickupPo
   return Array.from(byId.values());
 };
 
-const viewportCacheKey = (viewport: PickupPointViewport): string =>
-  [
-    viewport.zoom,
-    viewport.bounds.north.toFixed(2),
-    viewport.bounds.south.toFixed(2),
-    viewport.bounds.east.toFixed(2),
-    viewport.bounds.west.toFixed(2),
-  ].join("|");
+type CacheEntry = {
+  key: string;
+  bounds: PickupPointMapBounds;
+  pickupPoints: PickupPoint[];
+  total: number | null;
+  createdAt: number;
+};
+
+const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+
+const canUseSimpleLongitudeBounds = (bounds: PickupPointMapBounds): boolean => bounds.west <= bounds.east;
+
+const boundsContain = (outer: PickupPointMapBounds, inner: PickupPointMapBounds): boolean => {
+  if (!canUseSimpleLongitudeBounds(outer) || !canUseSimpleLongitudeBounds(inner)) {
+    return false;
+  }
+
+  return (
+    inner.south >= outer.south &&
+    inner.north <= outer.north &&
+    inner.west >= outer.west &&
+    inner.east <= outer.east
+  );
+};
+
+const expandBounds = (bounds: PickupPointMapBounds, factor: number): PickupPointMapBounds => {
+  if (!canUseSimpleLongitudeBounds(bounds)) {
+    return bounds;
+  }
+
+  const latSpan = bounds.north - bounds.south;
+  const lonSpan = bounds.east - bounds.west;
+  const latPadding = latSpan * factor;
+  const lonPadding = lonSpan * factor;
+
+  return {
+    north: clamp(bounds.north + latPadding, -85, 85),
+    south: clamp(bounds.south - latPadding, -85, 85),
+    east: clamp(bounds.east + lonPadding, -180, 180),
+    west: clamp(bounds.west - lonPadding, -180, 180),
+  };
+};
+
+const cacheKeyFromBounds = (bounds: PickupPointMapBounds): string =>
+  [bounds.north.toFixed(3), bounds.south.toFixed(3), bounds.east.toFixed(3), bounds.west.toFixed(3)].join("|");
+
+const putCacheEntry = (cache: Map<string, CacheEntry>, entry: CacheEntry): void => {
+  cache.delete(entry.key);
+  cache.set(entry.key, entry);
+
+  while (cache.size > MAX_CACHE_ENTRIES) {
+    const oldestKey = cache.keys().next().value as string | undefined;
+    if (!oldestKey) {
+      break;
+    }
+    cache.delete(oldestKey);
+  }
+};
+
+const findCoveringCacheEntry = (
+  cache: Map<string, CacheEntry>,
+  viewport: PickupPointViewport,
+): CacheEntry | null => {
+  const now = Date.now();
+  for (const entry of cache.values()) {
+    if (now - entry.createdAt > CACHE_TTL_MS) {
+      continue;
+    }
+
+    if (boundsContain(entry.bounds, viewport.bounds)) {
+      return entry;
+    }
+  }
+  return null;
+};
 
 export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickupPointsResult => {
   const [reloadCounter, setReloadCounter] = useState(0);
@@ -72,19 +142,27 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
     isBackgroundLoading: false,
   });
 
-  const cacheRef = useRef<Map<string, PickupPoint[]>>(new Map());
+  const cacheRef = useRef<Map<string, CacheEntry>>(new Map());
   const activeRequestIdRef = useRef(0);
-  const key = useMemo(() => (viewport ? viewportCacheKey(viewport) : null), [viewport]);
+  const requestedViewport = useMemo(() => {
+    if (!viewport) {
+      return null;
+    }
+
+    return {
+      zoom: viewport.zoom,
+      bounds: expandBounds(viewport.bounds, PREFETCH_PADDING_FACTOR),
+    } satisfies PickupPointViewport;
+  }, [viewport]);
+  const requestedBoundsKey = requestedViewport ? cacheKeyFromBounds(requestedViewport.bounds) : null;
 
   const reload = useCallback(() => {
-    if (key) {
-      cacheRef.current.delete(key);
-    }
+    cacheRef.current.clear();
     setReloadCounter((current) => current + 1);
-  }, [key]);
+  }, []);
 
   useEffect(() => {
-    if (!viewport || !key) {
+    if (!viewport || !requestedViewport || !requestedBoundsKey) {
       return;
     }
 
@@ -92,14 +170,14 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
     activeRequestIdRef.current = requestId;
     const isActiveRequest = (): boolean => activeRequestIdRef.current === requestId;
 
-    const cached = cacheRef.current.get(key);
-    if (cached) {
+    const coveringCacheEntry = findCoveringCacheEntry(cacheRef.current, viewport);
+    if (coveringCacheEntry) {
       if (isActiveRequest()) {
         setState({
           status: "success",
-          pickupPoints: cached,
+          pickupPoints: coveringCacheEntry.pickupPoints,
           errorMessage: null,
-          totalInViewport: cached.length,
+          totalInViewport: coveringCacheEntry.total,
           isBackgroundLoading: false,
         });
       }
@@ -120,7 +198,7 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
       }
 
       fetchPickupPointsPage({
-        viewport,
+        viewport: requestedViewport,
         page: 1,
         first: FIRST_PAGE_SIZE,
         signal: controller.signal,
@@ -132,7 +210,13 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
 
           let aggregated = firstPage.pickupPoints;
           const initialSlice = aggregated.slice(0, MAX_PICKUP_POINTS);
-          cacheRef.current.set(key, initialSlice);
+          putCacheEntry(cacheRef.current, {
+            key: requestedBoundsKey,
+            bounds: requestedViewport.bounds,
+            pickupPoints: initialSlice,
+            total: firstPage.total,
+            createdAt: Date.now(),
+          });
 
           if (isActiveRequest()) {
             setState({
@@ -154,7 +238,7 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
             loadedBackgroundPages < MAX_BACKGROUND_PAGES
           ) {
             const nextPage = await fetchPickupPointsPage({
-              viewport,
+              viewport: requestedViewport,
               page,
               first: BACKGROUND_PAGE_SIZE,
               signal: controller.signal,
@@ -166,7 +250,13 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
 
             aggregated = mergeUniqueById(aggregated, nextPage.pickupPoints);
             const nextSlice = aggregated.slice(0, MAX_PICKUP_POINTS);
-            cacheRef.current.set(key, nextSlice);
+            putCacheEntry(cacheRef.current, {
+              key: requestedBoundsKey,
+              bounds: requestedViewport.bounds,
+              pickupPoints: nextSlice,
+              total: nextPage.total,
+              createdAt: Date.now(),
+            });
 
             if (isActiveRequest()) {
               setState((current) => ({
@@ -213,7 +303,7 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
       window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [reloadCounter, viewport, key]);
+  }, [reloadCounter, requestedBoundsKey, requestedViewport, viewport]);
 
   return {
     ...state,
