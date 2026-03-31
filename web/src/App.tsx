@@ -8,6 +8,14 @@ import { usePickupPoints } from "./features/pickup-points/use-pickup-points";
 
 type SearchStatus = "idle" | "loading" | "success" | "error";
 
+const isLongitudeInBounds = (longitude: number, west: number, east: number): boolean => {
+  if (west <= east) {
+    return longitude >= west && longitude <= east;
+  }
+
+  return longitude >= west || longitude <= east;
+};
+
 function App() {
   const [mapViewport, setMapViewport] = useState<PickupPointViewport | null>(null);
   const { status, pickupPoints, errorMessage, reload, totalInViewport, isViewportLoading, isBackgroundLoading } =
@@ -110,6 +118,19 @@ function App() {
             : { ...point, openingHours: overriddenOpeningHours };
         })();
   const isViewportRefreshing = isViewportLoading && pickupPoints.length > 0;
+  const visiblePickupPointsCount = useMemo(() => {
+    if (!mapViewport) {
+      return 0;
+    }
+
+    return pickupPoints.filter((pickupPoint) => {
+      if (pickupPoint.latitude < mapViewport.bounds.south || pickupPoint.latitude > mapViewport.bounds.north) {
+        return false;
+      }
+
+      return isLongitudeInBounds(pickupPoint.longitude, mapViewport.bounds.west, mapViewport.bounds.east);
+    }).length;
+  }, [mapViewport, pickupPoints]);
 
   useEffect(() => {
     if (activePickupPointId && !pickupPointById.has(activePickupPointId)) {
@@ -199,8 +220,9 @@ function App() {
         ) : null}
         {status === "success" ? (
           <>
-            <p>Loaded pickup points: {pickupPoints.length}</p>
-            <p>Total in viewport (API): {totalInViewport ?? "-"}</p>
+            <p>Loaded pickup points (visible): {visiblePickupPointsCount}</p>
+            <p>Loaded pickup points (prefetched area): {pickupPoints.length}</p>
+            <p>Total in fetched area (API): {totalInViewport ?? "-"}</p>
             <p>Focused pickup point ID: {activePickupPointId ?? "-"}</p>
             <p>Selected pickup point ID: {selectedPickupPointId ?? "-"}</p>
             {isViewportRefreshing ? <p>Refreshing viewport results...</p> : null}
@@ -224,7 +246,7 @@ function App() {
         onViewportChange={setMapViewport}
         isViewportLoading={isViewportLoading}
         isBackgroundLoading={!isViewportLoading && isBackgroundLoading}
-        loadedCount={pickupPoints.length}
+        loadedCount={visiblePickupPointsCount}
         totalInViewport={totalInViewport}
         focusLocation={focusLocation}
       />
