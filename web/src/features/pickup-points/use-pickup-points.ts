@@ -10,6 +10,7 @@ type PickupPointsState = {
   pickupPoints: PickupPoint[];
   errorMessage: string | null;
   totalInViewport: number | null;
+  isViewportLoading: boolean;
   isBackgroundLoading: boolean;
 };
 
@@ -25,6 +26,7 @@ const MAX_BACKGROUND_PAGES = 8;
 const MAX_CACHE_ENTRIES = 8;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const PREFETCH_PADDING_FACTOR = 0.35;
+const MIN_VIEWPORT_LOADING_MS = 160;
 
 const mapErrorMessage = (error: unknown): string => {
   if (error instanceof GraphQlHttpError) {
@@ -139,6 +141,7 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
     pickupPoints: [],
     errorMessage: null,
     totalInViewport: null,
+    isViewportLoading: false,
     isBackgroundLoading: false,
   });
 
@@ -170,25 +173,37 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
     activeRequestIdRef.current = requestId;
     const isActiveRequest = (): boolean => activeRequestIdRef.current === requestId;
 
+    setState((current) => ({
+      ...current,
+      isViewportLoading: true,
+      errorMessage: null,
+      isBackgroundLoading: false,
+    }));
+
     const coveringCacheEntry = findCoveringCacheEntry(cacheRef.current, viewport);
     if (coveringCacheEntry) {
-      if (isActiveRequest()) {
-        setState({
-          status: "success",
-          pickupPoints: coveringCacheEntry.pickupPoints,
-          errorMessage: null,
-          totalInViewport: coveringCacheEntry.total,
-          isBackgroundLoading: false,
-        });
-      }
-      return;
+      const cacheApplyTimeoutId = window.setTimeout(() => {
+        if (isActiveRequest()) {
+          setState({
+            status: "success",
+            pickupPoints: coveringCacheEntry.pickupPoints,
+            errorMessage: null,
+            totalInViewport: coveringCacheEntry.total,
+            isViewportLoading: false,
+            isBackgroundLoading: false,
+          });
+        }
+      }, MIN_VIEWPORT_LOADING_MS);
+
+      return () => {
+        window.clearTimeout(cacheApplyTimeoutId);
+      };
     }
 
     const controller = new AbortController();
     setState((current) => ({
       ...current,
       status: "loading",
-      errorMessage: null,
       isBackgroundLoading: false,
     }));
 
@@ -224,6 +239,7 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
               pickupPoints: initialSlice,
               errorMessage: null,
               totalInViewport: firstPage.total,
+              isViewportLoading: false,
               isBackgroundLoading: firstPage.hasMorePages && initialSlice.length < MAX_PICKUP_POINTS,
             });
           }
@@ -293,6 +309,7 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
               pickupPoints: current.pickupPoints,
               errorMessage: mapErrorMessage(error),
               totalInViewport: current.totalInViewport,
+              isViewportLoading: false,
               isBackgroundLoading: false,
             }));
           }
@@ -302,6 +319,12 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
     return () => {
       window.clearTimeout(timeoutId);
       controller.abort();
+      if (isActiveRequest()) {
+        setState((current) => ({
+          ...current,
+          isViewportLoading: false,
+        }));
+      }
     };
   }, [reloadCounter, requestedBoundsKey, requestedViewport, viewport]);
 

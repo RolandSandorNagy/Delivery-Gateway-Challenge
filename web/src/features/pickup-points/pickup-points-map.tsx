@@ -9,7 +9,7 @@ type PickupPointsMapProps = {
   selectedPickupPointId: string | null;
   onOpenPickupPoint: (pickupPointId: string) => void;
   onViewportChange: (viewport: PickupPointViewport) => void;
-  isInitialLoading: boolean;
+  isViewportLoading: boolean;
   isBackgroundLoading: boolean;
   loadedCount: number;
   totalInViewport: number | null;
@@ -161,7 +161,7 @@ export const PickupPointsMap = ({
   selectedPickupPointId,
   onOpenPickupPoint,
   onViewportChange,
-  isInitialLoading,
+  isViewportLoading,
   isBackgroundLoading,
   loadedCount,
   totalInViewport,
@@ -193,10 +193,14 @@ export const PickupPointsMap = ({
             onViewportChange={onViewportChange}
           />
         </MapContainer>
-        {isInitialLoading ? (
+        {isViewportLoading ? (
           <div className="map-loading-overlay" role="status" aria-live="polite">
             <div className="loading-spinner" />
-            <p>Loading pickup points for this map area...</p>
+            <p>
+              {pickupPoints.length === 0
+                ? "Loading pickup points for this map area..."
+                : "Updating map results for new viewport..."}
+            </p>
           </div>
         ) : null}
         {isBackgroundLoading ? (

@@ -10,7 +10,7 @@ type SearchStatus = "idle" | "loading" | "success" | "error";
 
 function App() {
   const [mapViewport, setMapViewport] = useState<PickupPointViewport | null>(null);
-  const { status, pickupPoints, errorMessage, reload, totalInViewport, isBackgroundLoading } =
+  const { status, pickupPoints, errorMessage, reload, totalInViewport, isViewportLoading, isBackgroundLoading } =
     usePickupPoints(mapViewport);
   const [activePickupPointId, setActivePickupPointId] = useState<string | null>(null);
   const [selectedPickupPointId, setSelectedPickupPointId] = useState<string | null>(null);
@@ -109,8 +109,7 @@ function App() {
             ? point
             : { ...point, openingHours: overriddenOpeningHours };
         })();
-  const isInitialMapLoading = status === "loading" && pickupPoints.length === 0;
-  const isViewportRefreshing = status === "loading" && pickupPoints.length > 0;
+  const isViewportRefreshing = isViewportLoading && pickupPoints.length > 0;
 
   useEffect(() => {
     if (activePickupPointId && !pickupPointById.has(activePickupPointId)) {
@@ -205,7 +204,7 @@ function App() {
             <p>Focused pickup point ID: {activePickupPointId ?? "-"}</p>
             <p>Selected pickup point ID: {selectedPickupPointId ?? "-"}</p>
             {isViewportRefreshing ? <p>Refreshing viewport results...</p> : null}
-            {isBackgroundLoading ? <p>Loading more points in background...</p> : null}
+            {!isViewportLoading && isBackgroundLoading ? <p>Loading more points in background...</p> : null}
             {selectedPickupPoint ? (
               <p>
                 Selected pickup point: {selectedPickupPoint.name} ({selectedPickupPoint.address || "N/A"})
@@ -223,8 +222,8 @@ function App() {
         selectedPickupPointId={selectedPickupPointId}
         onOpenPickupPoint={setActivePickupPointId}
         onViewportChange={setMapViewport}
-        isInitialLoading={isInitialMapLoading}
-        isBackgroundLoading={isBackgroundLoading || isViewportRefreshing}
+        isViewportLoading={isViewportLoading}
+        isBackgroundLoading={!isViewportLoading && isBackgroundLoading}
         loadedCount={pickupPoints.length}
         totalInViewport={totalInViewport}
         focusLocation={focusLocation}
