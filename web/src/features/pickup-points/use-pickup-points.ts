@@ -73,6 +73,7 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
   });
 
   const cacheRef = useRef<Map<string, PickupPoint[]>>(new Map());
+  const activeRequestIdRef = useRef(0);
   const key = useMemo(() => (viewport ? viewportCacheKey(viewport) : null), [viewport]);
 
   const reload = useCallback(() => {
@@ -87,26 +88,36 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
       return;
     }
 
+    const requestId = activeRequestIdRef.current + 1;
+    activeRequestIdRef.current = requestId;
+    const isActiveRequest = (): boolean => activeRequestIdRef.current === requestId;
+
     const cached = cacheRef.current.get(key);
     if (cached) {
-      setState({
-        status: "success",
-        pickupPoints: cached,
-        errorMessage: null,
-        totalInViewport: cached.length,
-        isBackgroundLoading: false,
-      });
+      if (isActiveRequest()) {
+        setState({
+          status: "success",
+          pickupPoints: cached,
+          errorMessage: null,
+          totalInViewport: cached.length,
+          isBackgroundLoading: false,
+        });
+      }
       return;
     }
 
     const controller = new AbortController();
+    setState((current) => ({
+      ...current,
+      status: "loading",
+      errorMessage: null,
+      isBackgroundLoading: false,
+    }));
+
     const timeoutId = window.setTimeout(() => {
-      setState((current) => ({
-        ...current,
-        status: "loading",
-        errorMessage: null,
-        isBackgroundLoading: false,
-      }));
+      if (!isActiveRequest() || controller.signal.aborted) {
+        return;
+      }
 
       fetchPickupPointsPage({
         viewport,
@@ -115,17 +126,23 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
         signal: controller.signal,
       })
         .then(async (firstPage) => {
+          if (!isActiveRequest() || controller.signal.aborted) {
+            return;
+          }
+
           let aggregated = firstPage.pickupPoints;
           const initialSlice = aggregated.slice(0, MAX_PICKUP_POINTS);
           cacheRef.current.set(key, initialSlice);
 
-          setState({
-            status: "success",
-            pickupPoints: initialSlice,
-            errorMessage: null,
-            totalInViewport: firstPage.total,
-            isBackgroundLoading: firstPage.hasMorePages && initialSlice.length < MAX_PICKUP_POINTS,
-          });
+          if (isActiveRequest()) {
+            setState({
+              status: "success",
+              pickupPoints: initialSlice,
+              errorMessage: null,
+              totalInViewport: firstPage.total,
+              isBackgroundLoading: firstPage.hasMorePages && initialSlice.length < MAX_PICKUP_POINTS,
+            });
+          }
 
           let page = 2;
           let hasMorePages = firstPage.hasMorePages;
@@ -143,42 +160,52 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
               signal: controller.signal,
             });
 
+            if (!isActiveRequest() || controller.signal.aborted) {
+              return;
+            }
+
             aggregated = mergeUniqueById(aggregated, nextPage.pickupPoints);
             const nextSlice = aggregated.slice(0, MAX_PICKUP_POINTS);
             cacheRef.current.set(key, nextSlice);
 
-            setState((current) => ({
-              ...current,
-              pickupPoints: nextSlice,
-              totalInViewport: nextPage.total,
-              isBackgroundLoading:
-                nextPage.hasMorePages &&
-                nextSlice.length < MAX_PICKUP_POINTS &&
-                loadedBackgroundPages + 1 < MAX_BACKGROUND_PAGES,
-            }));
+            if (isActiveRequest()) {
+              setState((current) => ({
+                ...current,
+                pickupPoints: nextSlice,
+                totalInViewport: nextPage.total,
+                isBackgroundLoading:
+                  nextPage.hasMorePages &&
+                  nextSlice.length < MAX_PICKUP_POINTS &&
+                  loadedBackgroundPages + 1 < MAX_BACKGROUND_PAGES,
+              }));
+            }
 
             hasMorePages = nextPage.hasMorePages;
             page += 1;
             loadedBackgroundPages += 1;
           }
 
-          setState((current) => ({
-            ...current,
-            isBackgroundLoading: false,
-          }));
+          if (isActiveRequest()) {
+            setState((current) => ({
+              ...current,
+              isBackgroundLoading: false,
+            }));
+          }
         })
         .catch((error: unknown) => {
           if (isAbortError(error)) {
             return;
           }
 
-          setState((current) => ({
-            status: "error",
-            pickupPoints: current.pickupPoints,
-            errorMessage: mapErrorMessage(error),
-            totalInViewport: current.totalInViewport,
-            isBackgroundLoading: false,
-          }));
+          if (isActiveRequest()) {
+            setState((current) => ({
+              status: "error",
+              pickupPoints: current.pickupPoints,
+              errorMessage: mapErrorMessage(error),
+              totalInViewport: current.totalInViewport,
+              isBackgroundLoading: false,
+            }));
+          }
         });
     }, FETCH_DEBOUNCE_MS);
 
@@ -193,4 +220,3 @@ export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickup
     reload,
   };
 };
-

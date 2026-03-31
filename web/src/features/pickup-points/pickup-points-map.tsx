@@ -201,6 +201,7 @@ export const PickupPointsMap = ({
         ) : null}
         {isBackgroundLoading ? (
           <div className="map-background-badge" role="status" aria-live="polite">
+            <span className="mini-spinner" aria-hidden="true" />
             Updating results: {loadedCount}
             {totalInViewport ? ` / ${totalInViewport}` : ""}
           </div>
