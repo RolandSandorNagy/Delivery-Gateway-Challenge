@@ -119,12 +119,6 @@ const ClusteredMarkersLayer = ({
               key={`cluster-${item.id}`}
               icon={createClusterIcon(item.count)}
               position={[item.latitude, item.longitude]}
-              eventHandlers={{
-                click: () => {
-                  const nextZoom = Math.min(viewport.zoom + 2, 18);
-                  map.flyTo([item.latitude, item.longitude], nextZoom, { duration: 0.3 });
-                },
-              }}
             >
               <Popup>{item.count} pickup points in this area</Popup>
             </Marker>

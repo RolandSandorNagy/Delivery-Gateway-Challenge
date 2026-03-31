@@ -19,10 +19,10 @@ export type UsePickupPointsResult = PickupPointsState & {
 };
 
 const FETCH_DEBOUNCE_MS = 300;
-const FIRST_PAGE_SIZE = 200;
-const BACKGROUND_PAGE_SIZE = 200;
+const FIRST_PAGE_SIZE = 400;
+const BACKGROUND_PAGE_SIZE = 1000;
 const MAX_PICKUP_POINTS = 2000;
-const MAX_BACKGROUND_PAGES = 8;
+const MAX_BACKGROUND_PAGES = 4;
 const MAX_CACHE_ENTRIES = 8;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const PREFETCH_PADDING_FACTOR = 0.35;
