@@ -1,25 +1,48 @@
-// NOTE: Field names will be validated against the live schema before wiring UI.
 export const PICKUP_POINTS_QUERY = `
   query PickupPoints(
-    $merchantId: ID!
     $sessionId: ID!
+    $first: Int!
+    $page: Int
   ) {
-    pickupPoints(
-      merchantId: $merchantId
-      sessionId: $sessionId
-    ) {
-      id
-      name
-      type
-      openingHours
-      address {
-        formatted
-      }
-      location {
-        lat
-        lng
+    session(id: $sessionId) {
+      pickupPoint {
+        pickupPoints {
+          points(first: $first, page: $page) {
+            paginatorInfo {
+              currentPage
+              hasMorePages
+              total
+              lastPage
+            }
+            data {
+              id
+              name
+              type
+              address {
+                city
+                postalCode
+                addressLine1
+                addressLine2
+              }
+              location {
+                latitude
+                longitude
+              }
+              openingHours {
+                day
+                start {
+                  hour
+                  minute
+                }
+                end {
+                  hour
+                  minute
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
 `;
-
