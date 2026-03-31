@@ -1,10 +1,11 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as L from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import iconRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
 import iconUrl from "leaflet/dist/images/marker-icon.png";
 import shadowUrl from "leaflet/dist/images/marker-shadow.png";
 import type { PickupPoint } from "./model";
+import { clusterPickupPoints, type MapViewport } from "./pickup-points-clustering";
 
 L.Icon.Default.mergeOptions({
   iconRetinaUrl,
@@ -20,7 +21,30 @@ type PickupPointsMapProps = {
 
 const DEFAULT_CENTER: [number, number] = [47.4979, 19.0402];
 const DEFAULT_ZOOM = 12;
-const MAX_RENDERED_MARKERS = 2000;
+
+const readViewport = (map: L.Map): MapViewport => {
+  const bounds = map.getBounds();
+
+  return {
+    zoom: map.getZoom(),
+    bounds: {
+      north: bounds.getNorth(),
+      south: bounds.getSouth(),
+      east: bounds.getEast(),
+      west: bounds.getWest(),
+    },
+  };
+};
+
+const createClusterIcon = (count: number): L.DivIcon => {
+  const sizeClass = count < 10 ? "cluster-marker-sm" : count < 100 ? "cluster-marker-md" : "cluster-marker-lg";
+
+  return L.divIcon({
+    html: `<span>${count}</span>`,
+    className: `cluster-marker ${sizeClass}`,
+    iconSize: [40, 40],
+  });
+};
 
 const FitMapToPoints = ({ pickupPoints }: { pickupPoints: PickupPoint[] }) => {
   const map = useMap();
@@ -41,25 +65,57 @@ const FitMapToPoints = ({ pickupPoints }: { pickupPoints: PickupPoint[] }) => {
   return null;
 };
 
-export const PickupPointsMap = ({
+const ClusteredMarkersLayer = ({
   pickupPoints,
   selectedPickupPointId,
   onSelectPickupPoint,
 }: PickupPointsMapProps) => {
-  const renderedPoints = useMemo(
-    () => pickupPoints.slice(0, MAX_RENDERED_MARKERS),
-    [pickupPoints],
+  const map = useMap();
+  const [viewport, setViewport] = useState<MapViewport>(() => readViewport(map));
+
+  useEffect(() => {
+    const onMapMoveOrZoom = (): void => {
+      setViewport(readViewport(map));
+    };
+
+    map.on("moveend", onMapMoveOrZoom);
+    map.on("zoomend", onMapMoveOrZoom);
+    onMapMoveOrZoom();
+
+    return () => {
+      map.off("moveend", onMapMoveOrZoom);
+      map.off("zoomend", onMapMoveOrZoom);
+    };
+  }, [map]);
+
+  const clusteredItems = useMemo(
+    () => clusterPickupPoints(pickupPoints, viewport),
+    [pickupPoints, viewport],
   );
 
   return (
-    <section className="map-card">
-      <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="pickup-points-map">
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        <FitMapToPoints pickupPoints={renderedPoints} />
-        {renderedPoints.map((point) => (
+    <>
+      {clusteredItems.map((item) => {
+        if (item.kind === "cluster") {
+          return (
+            <Marker
+              key={`cluster-${item.id}`}
+              icon={createClusterIcon(item.count)}
+              position={[item.latitude, item.longitude]}
+              eventHandlers={{
+                click: () => {
+                  const nextZoom = Math.min(viewport.zoom + 2, 18);
+                  map.flyTo([item.latitude, item.longitude], nextZoom, { duration: 0.3 });
+                },
+              }}
+            >
+              <Popup>{item.count} pickup points in this area</Popup>
+            </Marker>
+          );
+        }
+
+        const point = item.point;
+        return (
           <Marker
             key={point.id}
             position={[point.latitude, point.longitude]}
@@ -77,14 +133,32 @@ export const PickupPointsMap = ({
               {selectedPickupPointId === point.id ? "Selected" : "Not selected"}
             </Popup>
           </Marker>
-        ))}
-      </MapContainer>
+        );
+      })}
+    </>
+  );
+};
 
-      {pickupPoints.length > MAX_RENDERED_MARKERS ? (
-        <p className="map-note">
-          Showing first {MAX_RENDERED_MARKERS} markers of {pickupPoints.length}. Clustering comes next.
-        </p>
-      ) : null}
+export const PickupPointsMap = ({
+  pickupPoints,
+  selectedPickupPointId,
+  onSelectPickupPoint,
+}: PickupPointsMapProps) => {
+  return (
+    <section className="map-card">
+      <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="pickup-points-map">
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <FitMapToPoints pickupPoints={pickupPoints} />
+        <ClusteredMarkersLayer
+          pickupPoints={pickupPoints}
+          selectedPickupPointId={selectedPickupPointId}
+          onSelectPickupPoint={onSelectPickupPoint}
+        />
+      </MapContainer>
+      <p className="map-note">Viewport-based clustering is active for large datasets.</p>
     </section>
   );
 };
