@@ -1,6 +1,6 @@
 import { appEnv } from "../../config/env";
 import { requestGraphQl } from "../../lib/graphql-client";
-import type { PickupPoint } from "./model";
+import type { PickupPoint, PickupPointViewport } from "./model";
 import { PICKUP_POINTS_QUERY } from "./pickup-points.query";
 
 type PickupPointsQueryData = {
@@ -133,40 +133,50 @@ const toDomainPickupPoint = (
 };
 
 type FetchPickupPointsOptions = {
+  viewport: PickupPointViewport;
   signal?: AbortSignal;
 };
 
-export const fetchPickupPoints = async ({ signal }: FetchPickupPointsOptions = {}): Promise<PickupPoint[]> => {
-  const result: PickupPoint[] = [];
-  let page = 1;
-  let hasMorePages = true;
+export const fetchPickupPoints = async ({
+  viewport,
+  signal,
+}: FetchPickupPointsOptions): Promise<PickupPoint[]> => {
+  const hasAntimeridianCrossing = viewport.bounds.west > viewport.bounds.east;
+  const filters = hasAntimeridianCrossing
+    ? undefined
+    : {
+        boundingBox: {
+          southWest: {
+            latitude: viewport.bounds.south,
+            longitude: viewport.bounds.west,
+          },
+          northEast: {
+            latitude: viewport.bounds.north,
+            longitude: viewport.bounds.east,
+          },
+        },
+      };
 
-  while (hasMorePages && result.length < MAX_PICKUP_POINTS) {
-    const data = await requestGraphQl<PickupPointsQueryData>({
-      endpoint: appEnv.graphqlEndpoint,
-      query: PICKUP_POINTS_QUERY,
-      variables: {
-        sessionId: appEnv.sessionId,
-        first: PAGE_SIZE,
-        page,
-      },
-      timeoutMs: appEnv.requestTimeoutMs,
-      signal,
-    });
+  const data = await requestGraphQl<PickupPointsQueryData>({
+    endpoint: appEnv.graphqlEndpoint,
+    query: PICKUP_POINTS_QUERY,
+    variables: {
+      sessionId: appEnv.sessionId,
+      first: PAGE_SIZE,
+      page: 1,
+      filters,
+    },
+    timeoutMs: appEnv.requestTimeoutMs,
+    signal,
+  });
 
-    const pointsPayload = data.session?.pickupPoint?.pickupPoints?.points;
-    if (!pointsPayload?.data) {
-      break;
-    }
-
-    const mappedPoints = pointsPayload.data
-      .map(toDomainPickupPoint)
-      .filter((item): item is PickupPoint => item !== null);
-
-    result.push(...mappedPoints);
-    hasMorePages = pointsPayload.paginatorInfo?.hasMorePages ?? false;
-    page += 1;
+  const pointsPayload = data.session?.pickupPoint?.pickupPoints?.points;
+  if (!pointsPayload?.data) {
+    return [];
   }
 
-  return result.slice(0, MAX_PICKUP_POINTS);
+  return pointsPayload.data
+    .map(toDomainPickupPoint)
+    .filter((item): item is PickupPoint => item !== null)
+    .slice(0, MAX_PICKUP_POINTS);
 };

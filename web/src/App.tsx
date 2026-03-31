@@ -2,12 +2,14 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { geocodeLocation } from "./features/location/geocoding.api";
 import { PickupPointInfoPanel } from "./features/pickup-points/pickup-point-info-panel";
 import { PickupPointsMap } from "./features/pickup-points/pickup-points-map";
+import type { PickupPointViewport } from "./features/pickup-points/model";
 import { usePickupPoints } from "./features/pickup-points/use-pickup-points";
 
 type SearchStatus = "idle" | "loading" | "success" | "error";
 
 function App() {
-  const { status, pickupPoints, errorMessage, reload } = usePickupPoints();
+  const [mapViewport, setMapViewport] = useState<PickupPointViewport | null>(null);
+  const { status, pickupPoints, errorMessage, reload } = usePickupPoints(mapViewport);
   const [activePickupPointId, setActivePickupPointId] = useState<string | null>(null);
   const [selectedPickupPointId, setSelectedPickupPointId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -113,6 +115,7 @@ function App() {
         ) : null}
       </section>
       <section className="status-card">
+        {mapViewport === null ? <p>Waiting for map viewport...</p> : null}
         <p>
           <strong>Status:</strong> {status}
         </p>
@@ -146,6 +149,7 @@ function App() {
         pickupPoints={pickupPoints}
         selectedPickupPointId={selectedPickupPointId}
         onOpenPickupPoint={setActivePickupPointId}
+        onViewportChange={setMapViewport}
         focusLocation={focusLocation}
       />
       <PickupPointInfoPanel

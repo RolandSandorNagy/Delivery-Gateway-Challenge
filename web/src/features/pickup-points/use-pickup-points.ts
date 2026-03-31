@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { GraphQlHttpError, GraphQlResponseError } from "../../lib/graphql-client";
-import type { PickupPoint } from "./model";
+import type { PickupPoint, PickupPointViewport } from "./model";
 import { fetchPickupPoints } from "./pickup-points.api";
 
 type PickupPointsStatus = "loading" | "success" | "error";
@@ -34,7 +34,9 @@ const mapErrorMessage = (error: unknown): string => {
 
 const isAbortError = (error: unknown): boolean => error instanceof DOMException && error.name === "AbortError";
 
-export const usePickupPoints = (): UsePickupPointsResult => {
+const FETCH_DEBOUNCE_MS = 300;
+
+export const usePickupPoints = (viewport: PickupPointViewport | null): UsePickupPointsResult => {
   const [reloadCounter, setReloadCounter] = useState(0);
   const [state, setState] = useState<PickupPointsState>({
     status: "loading",
@@ -47,42 +49,47 @@ export const usePickupPoints = (): UsePickupPointsResult => {
   }, []);
 
   useEffect(() => {
+    if (!viewport) {
+      return;
+    }
+
     const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      setState((current) => ({
+        ...current,
+        status: "loading",
+        errorMessage: null,
+      }));
 
-    setState((current) => ({
-      ...current,
-      status: "loading",
-      errorMessage: null,
-    }));
+      fetchPickupPoints({ viewport, signal: controller.signal })
+        .then((pickupPoints) => {
+          setState({
+            status: "success",
+            pickupPoints,
+            errorMessage: null,
+          });
+        })
+        .catch((error: unknown) => {
+          if (isAbortError(error)) {
+            return;
+          }
 
-    fetchPickupPoints({ signal: controller.signal })
-      .then((pickupPoints) => {
-        setState({
-          status: "success",
-          pickupPoints,
-          errorMessage: null,
+          setState((current) => ({
+            status: "error",
+            pickupPoints: current.pickupPoints,
+            errorMessage: mapErrorMessage(error),
+          }));
         });
-      })
-      .catch((error: unknown) => {
-        if (isAbortError(error)) {
-          return;
-        }
-
-        setState((current) => ({
-          status: "error",
-          pickupPoints: current.pickupPoints,
-          errorMessage: mapErrorMessage(error),
-        }));
-      });
+    }, FETCH_DEBOUNCE_MS);
 
     return () => {
+      window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [reloadCounter]);
+  }, [reloadCounter, viewport]);
 
   return {
     ...state,
     reload,
   };
 };
-

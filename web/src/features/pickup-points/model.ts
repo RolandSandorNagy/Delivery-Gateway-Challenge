@@ -14,3 +14,14 @@ export type PickupPointSearchArea = {
   radiusMeters: number;
 };
 
+export type PickupPointMapBounds = {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+};
+
+export type PickupPointViewport = {
+  zoom: number;
+  bounds: PickupPointMapBounds;
+};

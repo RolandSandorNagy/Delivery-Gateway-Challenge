@@ -1,14 +1,4 @@
-import type { PickupPoint } from "./model";
-
-export type MapViewport = {
-  zoom: number;
-  bounds: {
-    north: number;
-    south: number;
-    east: number;
-    west: number;
-  };
-};
+import type { PickupPoint, PickupPointViewport } from "./model";
 
 export type ClusteredPickupPoint =
   | {
@@ -55,7 +45,7 @@ const isLongitudeInBounds = (longitude: number, west: number, east: number): boo
   return longitude >= west || longitude <= east;
 };
 
-const isPickupPointInViewport = (pickupPoint: PickupPoint, viewport: MapViewport): boolean => {
+const isPickupPointInViewport = (pickupPoint: PickupPoint, viewport: PickupPointViewport): boolean => {
   if (pickupPoint.latitude < viewport.bounds.south || pickupPoint.latitude > viewport.bounds.north) {
     return false;
   }
@@ -69,7 +59,7 @@ const isPickupPointInViewport = (pickupPoint: PickupPoint, viewport: MapViewport
 
 export const clusterPickupPoints = (
   pickupPoints: PickupPoint[],
-  viewport: MapViewport,
+  viewport: PickupPointViewport,
   cellSizePx = DEFAULT_CELL_SIZE_PX,
 ): ClusteredPickupPoint[] => {
   const buckets = new Map<string, ClusterBucket>();
@@ -121,4 +111,3 @@ export const clusterPickupPoints = (
 
   return clusteredPoints;
 };
-

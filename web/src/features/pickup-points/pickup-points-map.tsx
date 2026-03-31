@@ -4,8 +4,8 @@ import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import iconRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
 import iconUrl from "leaflet/dist/images/marker-icon.png";
 import shadowUrl from "leaflet/dist/images/marker-shadow.png";
-import type { PickupPoint } from "./model";
-import { clusterPickupPoints, type MapViewport } from "./pickup-points-clustering";
+import type { PickupPoint, PickupPointViewport } from "./model";
+import { clusterPickupPoints } from "./pickup-points-clustering";
 
 L.Icon.Default.mergeOptions({
   iconRetinaUrl,
@@ -17,6 +17,7 @@ type PickupPointsMapProps = {
   pickupPoints: PickupPoint[];
   selectedPickupPointId: string | null;
   onOpenPickupPoint: (pickupPointId: string) => void;
+  onViewportChange: (viewport: PickupPointViewport) => void;
   focusLocation: {
     requestId: number;
     latitude: number;
@@ -27,13 +28,13 @@ type PickupPointsMapProps = {
 
 type ClusteredMarkersLayerProps = Pick<
   PickupPointsMapProps,
-  "pickupPoints" | "selectedPickupPointId" | "onOpenPickupPoint"
+  "pickupPoints" | "selectedPickupPointId" | "onOpenPickupPoint" | "onViewportChange"
 >;
 
 const DEFAULT_CENTER: [number, number] = [47.4979, 19.0402];
 const DEFAULT_ZOOM = 12;
 
-const readViewport = (map: L.Map): MapViewport => {
+const readViewport = (map: L.Map): PickupPointViewport => {
   const bounds = map.getBounds();
 
   return {
@@ -55,25 +56,6 @@ const createClusterIcon = (count: number): L.DivIcon => {
     className: `cluster-marker ${sizeClass}`,
     iconSize: [40, 40],
   });
-};
-
-const FitMapToPoints = ({ pickupPoints }: { pickupPoints: PickupPoint[] }) => {
-  const map = useMap();
-
-  useEffect(() => {
-    if (pickupPoints.length === 0) {
-      map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-      return;
-    }
-
-    const bounds = L.latLngBounds(
-      pickupPoints.map((point) => [point.latitude, point.longitude] as [number, number]),
-    );
-
-    map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 });
-  }, [map, pickupPoints]);
-
-  return null;
 };
 
 const FocusMapToLocation = ({
@@ -98,13 +80,16 @@ const ClusteredMarkersLayer = ({
   pickupPoints,
   selectedPickupPointId,
   onOpenPickupPoint,
+  onViewportChange,
 }: ClusteredMarkersLayerProps) => {
   const map = useMap();
-  const [viewport, setViewport] = useState<MapViewport>(() => readViewport(map));
+  const [viewport, setViewport] = useState<PickupPointViewport>(() => readViewport(map));
 
   useEffect(() => {
     const onMapMoveOrZoom = (): void => {
-      setViewport(readViewport(map));
+      const nextViewport = readViewport(map);
+      setViewport(nextViewport);
+      onViewportChange(nextViewport);
     };
 
     map.on("moveend", onMapMoveOrZoom);
@@ -115,7 +100,7 @@ const ClusteredMarkersLayer = ({
       map.off("moveend", onMapMoveOrZoom);
       map.off("zoomend", onMapMoveOrZoom);
     };
-  }, [map]);
+  }, [map, onViewportChange]);
 
   const clusteredItems = useMemo(
     () => clusterPickupPoints(pickupPoints, viewport),
@@ -172,6 +157,7 @@ export const PickupPointsMap = ({
   pickupPoints,
   selectedPickupPointId,
   onOpenPickupPoint,
+  onViewportChange,
   focusLocation,
 }: PickupPointsMapProps) => {
   const [mapLoadError, setMapLoadError] = useState<string | null>(null);
@@ -191,16 +177,17 @@ export const PickupPointsMap = ({
             },
           }}
         />
-        <FitMapToPoints pickupPoints={pickupPoints} />
         <FocusMapToLocation focusLocation={focusLocation} />
         <ClusteredMarkersLayer
           pickupPoints={pickupPoints}
           selectedPickupPointId={selectedPickupPointId}
           onOpenPickupPoint={onOpenPickupPoint}
+          onViewportChange={onViewportChange}
         />
       </MapContainer>
-      <p className="map-note">Viewport-based clustering is active for large datasets.</p>
+      <p className="map-note">Viewport-based fetch + clustering is active.</p>
       {mapLoadError ? <p className="error-text">{mapLoadError}</p> : null}
     </section>
   );
 };
+

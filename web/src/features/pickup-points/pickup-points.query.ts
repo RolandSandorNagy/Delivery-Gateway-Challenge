@@ -3,11 +3,12 @@ export const PICKUP_POINTS_QUERY = `
     $sessionId: ID!
     $first: Int!
     $page: Int
+    $filters: PickupPointFilterInput
   ) {
     session(id: $sessionId) {
       pickupPoint {
         pickupPoints {
-          points(first: $first, page: $page) {
+          points(first: $first, page: $page, filters: $filters) {
             paginatorInfo {
               currentPage
               hasMorePages
