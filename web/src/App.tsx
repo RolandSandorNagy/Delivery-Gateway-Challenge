@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { geocodeLocation } from "./features/location/geocoding.api";
 import { PickupPointInfoPanel } from "./features/pickup-points/pickup-point-info-panel";
 import { PickupPointsMap } from "./features/pickup-points/pickup-points-map";
@@ -21,6 +21,10 @@ function App() {
   } | null>(null);
   const searchRequestCounter = useRef(0);
   const activeSearchController = useRef<AbortController | null>(null);
+  const pickupPointById = useMemo(
+    () => new Map(pickupPoints.map((pickupPoint) => [pickupPoint.id, pickupPoint])),
+    [pickupPoints],
+  );
 
   useEffect(() => {
     return () => {
@@ -70,9 +74,19 @@ function App() {
   };
 
   const activePickupPoint =
-    activePickupPointId === null
-      ? null
-      : pickupPoints.find((pickupPoint) => pickupPoint.id === activePickupPointId) ?? null;
+    activePickupPointId === null ? null : pickupPointById.get(activePickupPointId) ?? null;
+  const selectedPickupPoint =
+    selectedPickupPointId === null ? null : pickupPointById.get(selectedPickupPointId) ?? null;
+
+  useEffect(() => {
+    if (activePickupPointId && !pickupPointById.has(activePickupPointId)) {
+      setActivePickupPointId(null);
+    }
+
+    if (selectedPickupPointId && !pickupPointById.has(selectedPickupPointId)) {
+      setSelectedPickupPointId(null);
+    }
+  }, [activePickupPointId, pickupPointById, selectedPickupPointId]);
 
   return (
     <main className="app-shell">
@@ -116,6 +130,11 @@ function App() {
             <p>Loaded pickup points: {pickupPoints.length}</p>
             <p>Focused pickup point ID: {activePickupPointId ?? "-"}</p>
             <p>Selected pickup point ID: {selectedPickupPointId ?? "-"}</p>
+            {selectedPickupPoint ? (
+              <p>
+                Selected pickup point: {selectedPickupPoint.name} ({selectedPickupPoint.address || "N/A"})
+              </p>
+            ) : null}
             <button type="button" onClick={reload}>
               Refresh
             </button>
