@@ -174,12 +174,22 @@ export const PickupPointsMap = ({
   onOpenPickupPoint,
   focusLocation,
 }: PickupPointsMapProps) => {
+  const [mapLoadError, setMapLoadError] = useState<string | null>(null);
+
   return (
     <section className="map-card">
       <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="pickup-points-map">
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          eventHandlers={{
+            tileerror: () => {
+              setMapLoadError("Map tiles could not be loaded. Please check your connection and try again.");
+            },
+            load: () => {
+              setMapLoadError(null);
+            },
+          }}
         />
         <FitMapToPoints pickupPoints={pickupPoints} />
         <FocusMapToLocation focusLocation={focusLocation} />
@@ -190,6 +200,7 @@ export const PickupPointsMap = ({
         />
       </MapContainer>
       <p className="map-note">Viewport-based clustering is active for large datasets.</p>
+      {mapLoadError ? <p className="error-text">{mapLoadError}</p> : null}
     </section>
   );
 };
