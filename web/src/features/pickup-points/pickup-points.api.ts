@@ -35,7 +35,11 @@ const toDomainPickupPoint = (item: PickupPointsQueryData["pickupPoints"][number]
   };
 };
 
-export const fetchPickupPoints = async (): Promise<PickupPoint[]> => {
+type FetchPickupPointsOptions = {
+  signal?: AbortSignal;
+};
+
+export const fetchPickupPoints = async ({ signal }: FetchPickupPointsOptions = {}): Promise<PickupPoint[]> => {
   const data = await requestGraphQl<PickupPointsQueryData>({
     endpoint: appEnv.graphqlEndpoint,
     query: PICKUP_POINTS_QUERY,
@@ -44,6 +48,7 @@ export const fetchPickupPoints = async (): Promise<PickupPoint[]> => {
       sessionId: appEnv.sessionId,
     },
     timeoutMs: appEnv.requestTimeoutMs,
+    signal,
   });
 
   return data.pickupPoints.map(toDomainPickupPoint).filter((item): item is PickupPoint => item !== null);

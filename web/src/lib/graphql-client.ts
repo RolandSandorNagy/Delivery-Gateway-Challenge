@@ -3,6 +3,7 @@ export type GraphQlRequestOptions = {
   query: string;
   variables?: Record<string, unknown>;
   timeoutMs?: number;
+  signal?: AbortSignal;
 };
 
 export class GraphQlHttpError extends Error {
@@ -35,8 +36,19 @@ export const requestGraphQl = async <TData>({
   query,
   variables,
   timeoutMs = 15_000,
+  signal,
 }: GraphQlRequestOptions): Promise<TData> => {
   const controller = new AbortController();
+  const abortFromExternalSignal = (): void => {
+    controller.abort();
+  };
+
+  if (signal?.aborted) {
+    controller.abort();
+  } else if (signal) {
+    signal.addEventListener("abort", abortFromExternalSignal);
+  }
+
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
@@ -67,7 +79,9 @@ export const requestGraphQl = async <TData>({
 
     return payload.data;
   } finally {
+    if (signal) {
+      signal.removeEventListener("abort", abortFromExternalSignal);
+    }
     window.clearTimeout(timeoutId);
   }
 };
-
