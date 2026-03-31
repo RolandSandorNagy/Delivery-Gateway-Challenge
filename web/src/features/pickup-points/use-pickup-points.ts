@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { GraphQlHttpError, GraphQlResponseError } from "../../lib/graphql-client";
+import { GraphQlHttpError, GraphQlResponseError, GraphQlTimeoutError } from "../../lib/graphql-client";
 import type { PickupPoint, PickupPointMapBounds, PickupPointViewport } from "./model";
 import { fetchPickupPointsPage } from "./pickup-points.api";
 
@@ -19,7 +19,7 @@ export type UsePickupPointsResult = PickupPointsState & {
 };
 
 const FETCH_DEBOUNCE_MS = 300;
-const PAGE_SIZE = 800;
+const PAGE_SIZE = 400;
 const MAX_PICKUP_POINTS = 4000;
 const MAX_CACHE_ENTRIES = 8;
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -34,6 +34,10 @@ const mapErrorMessage = (error: unknown): string => {
   if (error instanceof GraphQlResponseError) {
     const firstMessage = error.details[0]?.message;
     return firstMessage ? `GraphQL error: ${firstMessage}` : "GraphQL response returned an unknown error.";
+  }
+
+  if (error instanceof GraphQlTimeoutError) {
+    return `GraphQL request timed out (${error.timeoutMs} ms). Try zooming in or refreshing.`;
   }
 
   if (error instanceof Error) {

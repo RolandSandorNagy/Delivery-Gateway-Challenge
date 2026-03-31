@@ -26,6 +26,16 @@ export class GraphQlResponseError extends Error {
   }
 }
 
+export class GraphQlTimeoutError extends Error {
+  readonly timeoutMs: number;
+
+  constructor(timeoutMs: number) {
+    super(`GraphQL request timed out after ${timeoutMs} ms`);
+    this.name = "GraphQlTimeoutError";
+    this.timeoutMs = timeoutMs;
+  }
+}
+
 type GraphQlEnvelope<TData> = {
   data?: TData;
   errors?: Array<{ message: string }>;
@@ -39,6 +49,7 @@ export const requestGraphQl = async <TData>({
   signal,
 }: GraphQlRequestOptions): Promise<TData> => {
   const controller = new AbortController();
+  let timedOut = false;
   const abortFromExternalSignal = (): void => {
     controller.abort();
   };
@@ -49,20 +60,31 @@ export const requestGraphQl = async <TData>({
     signal.addEventListener("abort", abortFromExternalSignal);
   }
 
-  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        query,
-        variables,
-      }),
-      signal: controller.signal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query,
+          variables,
+        }),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (timedOut) {
+        throw new GraphQlTimeoutError(timeoutMs);
+      }
+      throw error;
+    }
 
     if (!response.ok) {
       throw new GraphQlHttpError(response.status, `GraphQL HTTP error: ${response.status}`);
