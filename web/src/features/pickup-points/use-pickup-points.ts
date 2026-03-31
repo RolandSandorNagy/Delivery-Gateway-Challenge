@@ -18,7 +18,7 @@ export type UsePickupPointsResult = PickupPointsState & {
   reload: () => void;
 };
 
-const FETCH_DEBOUNCE_MS = 300;
+const FETCH_DEBOUNCE_MS = 600;
 const PAGE_SIZE = 400;
 const MAX_PICKUP_POINTS = 4000;
 const MAX_CACHE_ENTRIES = 8;
