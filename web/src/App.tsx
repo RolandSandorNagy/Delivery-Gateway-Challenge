@@ -1,7 +1,10 @@
+import { useState } from "react";
+import { PickupPointsMap } from "./features/pickup-points/pickup-points-map";
 import { usePickupPoints } from "./features/pickup-points/use-pickup-points";
 
 function App() {
   const { status, pickupPoints, errorMessage, reload } = usePickupPoints();
+  const [selectedPickupPointId, setSelectedPickupPointId] = useState<string | null>(null);
 
   return (
     <main className="app-shell">
@@ -22,12 +25,19 @@ function App() {
         {status === "success" ? (
           <>
             <p>Loaded pickup points: {pickupPoints.length}</p>
+            <p>Selected pickup point ID: {selectedPickupPointId ?? "-"}</p>
             <button type="button" onClick={reload}>
               Refresh
             </button>
           </>
         ) : null}
       </section>
+
+      <PickupPointsMap
+        pickupPoints={pickupPoints}
+        selectedPickupPointId={selectedPickupPointId}
+        onSelectPickupPoint={setSelectedPickupPointId}
+      />
     </main>
   );
 }
