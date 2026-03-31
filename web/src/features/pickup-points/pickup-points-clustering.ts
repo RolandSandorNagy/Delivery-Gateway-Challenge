@@ -11,6 +11,8 @@ export type ClusteredPickupPoint =
       latitude: number;
       longitude: number;
       count: number;
+      points: PickupPoint[];
+      hiddenCount: number;
     };
 
 type ClusterBucket = {
@@ -18,9 +20,11 @@ type ClusterBucket = {
   sumLatitude: number;
   sumLongitude: number;
   firstPoint: PickupPoint;
+  previewPoints: PickupPoint[];
 };
 
 const DEFAULT_CELL_SIZE_PX = 60;
+const MAX_CLUSTER_PREVIEW_ITEMS = 12;
 
 const projectToPixel = (
   latitude: number,
@@ -79,6 +83,9 @@ export const clusterPickupPoints = (
       existingBucket.count += 1;
       existingBucket.sumLatitude += pickupPoint.latitude;
       existingBucket.sumLongitude += pickupPoint.longitude;
+      if (existingBucket.previewPoints.length < MAX_CLUSTER_PREVIEW_ITEMS) {
+        existingBucket.previewPoints.push(pickupPoint);
+      }
       continue;
     }
 
@@ -87,6 +94,7 @@ export const clusterPickupPoints = (
       sumLatitude: pickupPoint.latitude,
       sumLongitude: pickupPoint.longitude,
       firstPoint: pickupPoint,
+      previewPoints: [pickupPoint],
     });
   }
 
@@ -106,6 +114,14 @@ export const clusterPickupPoints = (
       latitude: bucket.sumLatitude / bucket.count,
       longitude: bucket.sumLongitude / bucket.count,
       count: bucket.count,
+      points: [...bucket.previewPoints].sort((a, b) => {
+        const byAddress = a.address.localeCompare(b.address);
+        if (byAddress !== 0) {
+          return byAddress;
+        }
+        return a.name.localeCompare(b.name);
+      }),
+      hiddenCount: Math.max(0, bucket.count - bucket.previewPoints.length),
     });
   }
 

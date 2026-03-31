@@ -232,6 +232,20 @@ button:hover {
   font-size: 0.9rem;
 }
 
+.cluster-popup-list {
+  margin: 0.5rem 0;
+  padding-left: 1rem;
+  max-height: 10rem;
+  overflow: auto;
+}
+
+.cluster-popup-item-btn {
+  all: unset;
+  cursor: pointer;
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

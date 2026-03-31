@@ -120,7 +120,24 @@ const ClusteredMarkersLayer = ({
               icon={createClusterIcon(item.count)}
               position={[item.latitude, item.longitude]}
             >
-              <Popup>{item.count} pickup points in this area</Popup>
+              <Popup>
+                <strong>{item.count} pickup points in this area</strong>
+                <ul className="cluster-popup-list">
+                  {item.points.map((point) => (
+                    <li key={point.id}>
+                      <button
+                        type="button"
+                        className="cluster-popup-item-btn"
+                        onClick={() => onOpenPickupPoint(point.id)}
+                      >
+                        {point.name}
+                        {point.address ? ` - ${point.address}` : ""}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {item.hiddenCount > 0 ? <p>...and {item.hiddenCount} more pickup points.</p> : null}
+              </Popup>
             </Marker>
           );
         }
